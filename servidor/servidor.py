@@ -54,6 +54,7 @@ def tcp_server():
 
 def udp_server():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind((HOST, UDP_PORT))
     print(f"[UDP] Servidor escuchando en {HOST}:{UDP_PORT}")
 

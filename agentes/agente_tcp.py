@@ -43,7 +43,7 @@ def enviar_tcp(tabla, nombre_archivo):
                 print(f"[TCP] [{tabla}] {count} registros enviados...")
             if LIMITE and count >= LIMITE:
                 break
-            time.sleep(1)
+            time.sleep(0.2)
 
     print(f"[TCP] [{tabla}] Total enviado: {count} registros.")
     sock.close()

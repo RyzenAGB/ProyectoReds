@@ -1,17 +1,52 @@
-# Python
+# ==========================================
+# Archivos de Entorno / Secretos (SEGURIDAD)
+# ==========================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+secret*/
+
+# ==========================================
+# Python / Servidor Backend
+# ==========================================
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
 .venv/
 venv/
+env/
+# Logs
+*.log
 
-# Environment
-.env
-
-# Node
+# ==========================================
+# Node.js / Frontend React (Vite)
+# ==========================================
 node_modules/
 dist/
+dist-ssr/
+*.local
+.npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# IDE
+# ==========================================
+# Archivos del Sistema Operativo (IDE / OS)
+# ==========================================
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db
+
+# ==========================================
+# Datasets pesados (Opcional)
+# ==========================================
+# Descomenta la siguiente línea si NO quieres subir NINGÚN dataset a GitHub por peso:
+# dataset/*.csv
+# O excluye solo los pesados:
+dataset/olist_order_payments_dataset.csv
+dataset/olist_order_reviews_dataset.csv

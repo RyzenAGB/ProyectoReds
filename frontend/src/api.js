@@ -23,3 +23,21 @@ export async function fetchResumen() {
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
+
+export async function fetchVentasEstado() {
+  const res = await fetch(`${API_BASE}/metricas/ventas-estado`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function fetchCategoriasRetraso() {
+  const res = await fetch(`${API_BASE}/metricas/categorias-retraso`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function fetchIngestaTimeline() {
+  const res = await fetch(`${API_BASE}/metricas/ingesta-timeline`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}

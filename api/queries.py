@@ -96,3 +96,54 @@ SELECT COUNT(*) as total_pings
 FROM ingestion_log
 WHERE origen = 'UDP'
 """
+
+# ── Nuevas queries ────────────────────────────────────────────────────────────
+
+SQL_RESUMEN_EXTRA = """
+SELECT
+    (SELECT COUNT(*) FROM fact_orders) AS total_ordenes,
+    (SELECT COUNT(*) FROM dim_products) AS total_productos,
+    (SELECT COALESCE(ROUND(AVG(freight_value)::numeric, 2), 0) FROM fact_order_items) AS flete_promedio
+"""
+
+SQL_VENTAS_POR_ESTADO = """
+SELECT
+    c.state AS estado,
+    COUNT(DISTINCT o.order_id) AS total_ventas
+FROM fact_orders o
+JOIN dim_customers c ON o.customer_id = c.customer_id
+GROUP BY c.state
+ORDER BY total_ventas DESC
+LIMIT 15
+"""
+
+SQL_CATEGORIAS_RETRASO = """
+SELECT
+    p.category_name AS categoria,
+    ROUND(AVG(
+        EXTRACT(EPOCH FROM (o.delivered_ts - o.estimated_ts)) / 86400.0
+    )::numeric, 2) AS dias_retraso_promedio,
+    COUNT(*) AS total_ordenes
+FROM fact_orders o
+JOIN fact_order_items oi ON o.order_id = oi.order_id
+JOIN dim_products p ON oi.product_id = p.product_id
+WHERE o.order_status = 'delivered'
+  AND o.delivered_ts IS NOT NULL
+  AND o.estimated_ts IS NOT NULL
+  AND p.category_name IS NOT NULL
+  AND p.category_name != ''
+GROUP BY p.category_name
+ORDER BY dias_retraso_promedio DESC
+LIMIT 10
+"""
+
+SQL_INGESTA_TIMELINE = """
+SELECT
+    DATE_TRUNC('minute', fecha) AS minuto,
+    origen,
+    COUNT(*) AS total
+FROM ingestion_log
+GROUP BY DATE_TRUNC('minute', fecha), origen
+ORDER BY minuto ASC
+LIMIT 200
+"""
