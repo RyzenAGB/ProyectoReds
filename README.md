@@ -35,7 +35,7 @@ Sistema completo de ETL logístico que simula un Data Warehouse moderno usando e
 - **Protocolo**: SOCK_STREAM — confiable, orientado a conexión
 - **Tablas**: orders, order_items, customers, sellers, products
 - **Justificación**: Datos transaccionales críticos que no pueden perderse (órdenes, pagos, facturación)
-- **Comportamiento**: Lee CSV línea a línea, envía cada 1 segundo
+- **Comportamiento**: Lee CSV línea a línea, envía cada 0.2 segundos
 
 ### Agente UDP (Puerto 12001)
 - **Protocolo**: SOCK_DGRAM — rápido, sin garantía de entrega
@@ -61,13 +61,13 @@ Sistema completo de ETL logístico que simula un Data Warehouse moderno usando e
 
 ```bash
 # Terminal 1: Servidor concurrente
-python servidor/servidor.py
+py -m servidor.servidor
 
 # Terminal 2: Agente TCP (datos transaccionales)
-python agentes/agente_tcp.py
+py -m agentes.agente_tcp
 
 # Terminal 3: Agente UDP (telemetría GPS)
-python agentes/agente_udp.py
+py -m agentes.agente_udp
 
 # Terminal 4: API REST
 uvicorn api.app:app --reload --port 8000
@@ -102,9 +102,53 @@ fact_order_items       → Ítems de orden (orden, producto, vendedor, precio, f
 
 ## Despliegue
 
-- **Base de datos**: Supabase (PostgreSQL en la nube)
-- **Backend API**: Cualquier servidor con Python + uvicorn
-- **Frontend**: Vercel (conectar repo de GitHub)
+### Arquitectura de Producción
+
+```
+┌─────────────┐      HTTP       ┌─────────────┐      SQL       ┌─────────────┐
+│   Vercel    │  ◄────────────► │   Render    │  ◄────────────►│  Supabase   │
+│  (Frontend) │                 │   (API)     │                │     (DB)    │
+│  React +    │                 │  FastAPI    │                │ PostgreSQL  │
+│  Chart.js   │                 │             │                │             │
+└─────────────┘                 └─────────────┘                └─────────────┘
+```
+
+### Paso 1: Subir a GitHub
+```bash
+git init
+git add .
+git commit -m "fase 3: sistema completo listo para despliegue"
+git branch -M main
+git remote add origin https://github.com/TU_USUARIO/datawarehouse-olist.git
+git push -u origin main
+```
+
+### Paso 2: API en Render
+1. Ve a [render.com](https://render.com) → "New Web Service"
+2. Conecta tu repo de GitHub
+3. Configura:
+   - **Name**: `datawarehouse-api`
+   - **Environment**: `Python 3`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn api.app:app --host 0.0.0.0 --port 10000`
+4. Añade variable `DATABASE_URL` en Environment Variables
+5. Click **Deploy**
+
+### Paso 3: Frontend en Vercel
+1. Ve a [vercel.com](https://vercel.com) → "Add New Project"
+2. Importa tu repo
+3. Configura:
+   - **Framework Preset**: `Vite`
+   - **Root Directory**: `frontend`
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `dist`
+4. Añade variable `VITE_API_URL=https://tu-api.onrender.com/api`
+5. Click **Deploy**
+
+### Notas
+- **Servidor TCP/UDP**: Solo para desarrollo local. En producción, la API lee directamente de Supabase.
+- **CORS**: El `app.py` tiene `allow_origins=["*"]`. Para producción restrictiva, cambia a tu URL de Vercel.
+- **Datos**: Los datos ya están en Supabase. El frontend en Vercel consume la API en Render, que a su vez lee de Supabase.
 
 ## Autores
 
