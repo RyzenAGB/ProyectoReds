@@ -29,6 +29,11 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+def root():
+    return {"message": "Data Warehouse Logistico API", "docs": "/docs", "health": "/api/health"}
+
+
 @app.get("/api/datos")
 def obtener_datos():
     with db_cursor() as cur:
