@@ -32,9 +32,18 @@ export default function IngestionTimeline({ data }) {
     )
   }
 
-  const labels = data.map((d) => formatMinute(d.minuto))
-  const tcpData = data.map((d) => d.TCP || 0)
-  const udpData = data.map((d) => d.UDP || 0)
+  // Agrupar por minuto y origen
+  const minutos = [...new Set(data.map((d) => d.minuto))].sort()
+  const tcpMap = {}
+  const udpMap = {}
+  data.forEach((d) => {
+    if (d.origen === 'TCP') tcpMap[d.minuto] = d.total
+    if (d.origen === 'UDP') udpMap[d.minuto] = d.total
+  })
+
+  const labels = minutos.map(formatMinute)
+  const tcpData = minutos.map((m) => tcpMap[m] || 0)
+  const udpData = minutos.map((m) => udpMap[m] || 0)
 
   const chartData = {
     labels,
