@@ -135,10 +135,66 @@ def metrica_resumen():
             tcp_rows = cur.fetchall()
             cur.execute(SQL_RESUMEN_UDP)
             udp_row = cur.fetchone()
+            cur.execute(SQL_RESUMEN_EXTRA)
+            extra = cur.fetchone()
 
         return {
             "tcp_por_tabla": [{"tabla": r[0], "total": r[1]} for r in tcp_rows],
             "udp_total_pings": udp_row[0] if udp_row else 0,
+            "total_ordenes": extra[0] if extra else 0,
+            "total_productos": extra[1] if extra else 0,
+            "flete_promedio": float(extra[2]) if extra else 0,
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/api/metricas/ventas-estado")
+def metrica_ventas_estado():
+    try:
+        with db_cursor() as cur:
+            cur.execute(SQL_VENTAS_POR_ESTADO)
+            rows = cur.fetchall()
+
+        return {
+            "data": [{"estado": r[0], "total_ventas": r[1]} for r in rows],
+            "total": len(rows),
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/api/metricas/categorias-retraso")
+def metrica_categorias_retraso():
+    try:
+        with db_cursor() as cur:
+            cur.execute(SQL_CATEGORIAS_RETRASO)
+            rows = cur.fetchall()
+
+        return {
+            "data": [
+                {"categoria": r[0], "dias_retraso_promedio": float(r[1]), "total_ordenes": r[2]}
+                for r in rows
+            ],
+            "total": len(rows),
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/api/metricas/ingesta-timeline")
+def metrica_ingesta_timeline():
+    try:
+        with db_cursor() as cur:
+            cur.execute(SQL_INGESTA_TIMELINE)
+            rows = cur.fetchall()
+
+        return {
+            "data": [
+                {"minuto": r[0].isoformat() if r[0] else None, "origen": r[1], "total": r[2]}
+                for r in rows
+            ],
+            "total": len(rows),
         }
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
