@@ -22,20 +22,36 @@ export default function DistanceChart({ data }) {
   const puntos = data.map((d) => ({
     x: d.distancia_km,
     y: d.dias_retraso,
+    retraso: d.dias_retraso,
   }))
+
+  const retrasados = puntos.filter(p => p.y > 0)
+  const anticipados = puntos.filter(p => p.y <= 0)
 
   const chartData = {
     datasets: [
       {
-        label: 'Órdenes entregadas',
-        data: puntos,
-        backgroundColor: 'rgba(56, 189, 248, 0.5)',
-        borderColor: 'rgba(56, 189, 248, 0.8)',
+        label: 'Entregas anticipadas',
+        data: anticipados,
+        backgroundColor: 'rgba(52, 211, 153, 0.5)',
+        borderColor: 'rgba(52, 211, 153, 0.8)',
         borderWidth: 1,
         pointRadius: 4,
         pointHoverRadius: 8,
-        pointHoverBackgroundColor: '#7dd3fc',
-        pointHoverBorderColor: '#38bdf8',
+        pointHoverBackgroundColor: '#6ee7b7',
+        pointHoverBorderColor: '#34d399',
+        pointHoverBorderWidth: 2,
+      },
+      {
+        label: 'Entregas con retraso',
+        data: retrasados,
+        backgroundColor: 'rgba(251, 146, 60, 0.6)',
+        borderColor: 'rgba(251, 146, 60, 0.9)',
+        borderWidth: 1,
+        pointRadius: 5,
+        pointHoverRadius: 9,
+        pointHoverBackgroundColor: '#fdba74',
+        pointHoverBorderColor: '#fb923c',
         pointHoverBorderWidth: 2,
       },
     ],
@@ -57,10 +73,20 @@ export default function DistanceChart({ data }) {
         padding: 12,
         cornerRadius: 8,
         callbacks: {
-          label: (ctx) =>
-            `Distancia: ${ctx.parsed.x.toFixed(1)} km — Retraso: ${ctx.parsed.y} días`,
+          label: (ctx) => {
+            const retraso = ctx.raw.retraso
+            const tipo = retraso > 0 ? 'Retraso' : 'Anticipado'
+            return `Distancia: ${ctx.parsed.x.toFixed(1)} km — ${tipo}: ${Math.abs(ctx.parsed.y).toFixed(1)} días`
+          },
+          afterBody: (items) => {
+            const val = items[0].raw.retraso
+            return val > 0
+              ? '⚠️ Entrega después de la fecha estimada'
+              : '✓ Entrega antes de la fecha estimada'
+          },
         },
       },
+      annotation: undefined,
     },
     scales: {
       x: {
@@ -69,10 +95,16 @@ export default function DistanceChart({ data }) {
         grid: { color: 'rgba(148, 163, 184, 0.06)' },
       },
       y: {
-        title: { display: true, text: 'Días de retraso', color: '#94a3b8', font: { family: "'Inter', sans-serif" } },
-        ticks: { color: '#475569', stepSize: 5, font: { family: "'JetBrains Mono', monospace", size: 11 } },
-        grid: { color: 'rgba(148, 163, 184, 0.06)' },
-        beginAtZero: true,
+        title: { display: true, text: 'Días vs fecha estimada', color: '#94a3b8', font: { family: "'Inter', sans-serif" } },
+        ticks: {
+          color: '#475569',
+          font: { family: "'JetBrains Mono', monospace", size: 11 },
+          callback: (val) => val > 0 ? `+${val}` : val,
+        },
+        grid: {
+          color: (ctx) => ctx.tick.value === 0 ? 'rgba(251, 191, 36, 0.3)' : 'rgba(148, 163, 184, 0.06)',
+          lineWidth: (ctx) => ctx.tick.value === 0 ? 2 : 1,
+        },
       },
     },
   }
