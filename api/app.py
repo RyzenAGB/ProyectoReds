@@ -92,12 +92,12 @@ def metrica_distancias():
 
             distancia = round(haversine(float(cust_lat), float(cust_lng), float(seller_lat), float(seller_lng)), 2)
             delivered, estimated = r[7], r[8]
-            dias_retraso = (delivered - estimated).days if delivered and estimated else 0
+            dias_retraso = round((delivered - estimated).total_seconds() / 86400.0, 2) if delivered and estimated else 0
 
             puntos.append({
                 "order_id": r[0],
                 "distancia_km": distancia,
-                "dias_retraso": max(0, dias_retraso),
+                "dias_retraso": dias_retraso,
                 "freight_value": float(r[9]) if r[9] else 0,
             })
         return {"data": puntos, "total": len(puntos)}

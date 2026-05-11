@@ -1,72 +1,232 @@
-# Data Warehouse Logístico — Brazilian E-Commerce Dataset
+# Data Warehouse Logistico — Brazilian E-Commerce Dataset (Olist)
 
-Sistema completo de ETL logístico que simula un Data Warehouse moderno usando el dataset público de Olist. Ingestiona datos vía TCP/UDP, los almacena en PostgreSQL (Supabase) y los expone mediante API REST + dashboard React.
+**Proyecto Final — Programacion de Aplicaciones de Red**  
+Ingenieria en Datos e Inteligencia Organizacional
 
-## Propuesta Técnica
+---
 
-**Enfoque**: Logística, Envíos y Análisis Geoespacial
-**Nivel**: Avanzado (Esquema Copo de Nieve con análisis espacial)
+## Descripcion del Proyecto
 
-### Tablas Seleccionadas
+Sistema completo de **Data Warehouse logistica** que simula un pipeline moderno de ETL (Extract, Transform, Load) usando datos reales de comercio electronico de Brasil.
 
-| Tipo | Tabla | Propósito |
-|------|-------|-----------|
-| Hechos | `olist_orders_dataset` | Estados de órdenes y fechas críticas |
-| Hechos | `olist_order_items_dataset` | Costo del producto y valor del flete |
-| Dimensión | `olist_customers_dataset` | Identificador y código postal del cliente |
-| Dimensión | `olist_sellers_dataset` | Identificador y código postal del vendedor |
-| Dimensión | `olist_geolocation_dataset` | Latitud, longitud, ciudad y estado por código postal |
-| Dimensión | `olist_products_dataset` | Categoría, peso y dimensiones del producto |
+El sistema demuestra el flujo completo de datos:
+1. **Ingesta**: Agentes Python envian datos via TCP (transaccional) y UDP (telemetria GPS)
+2. **Almacenamiento**: Servidor concurrente recibe y guarda datos en PostgreSQL (Supabase)
+3. **Visualizacion**: Dashboard React consume API REST y muestra metricas analiticas en tiempo real
 
-### Justificación de Negocio
+---
 
-- **Optimización de Rutas y Fletes**: Identificar combinaciones origen-destino con mayores costos de envío
-- **Detección de Cuellos de Botella Geoespaciales**: Mapear estados con mayores retrasos
-- **Toma de Decisiones de Infraestructura**: Justificar matemáticamente ubicación de nuevos centros de distribución
+## Recursos en Produccion (Acceso Publico)
 
-### Métricas Estratégicas
+| Recurso | URL | Descripcion |
+|---------|-----|-------------|
+| **Dashboard Web** | [https://proyecto-reds.vercel.app/](https://proyecto-reds.vercel.app/) | Interfaz visual con 6 pestanas de analisis |
+| **API REST** | [https://datawarehouse-api.onrender.com](https://datawarehouse-api.onrender.com) | 10 endpoints analiticos + documentacion auto-generada |
+| **Repositorio** | [https://github.com/RyzenAGB/ProyectoReds](https://github.com/RyzenAGB/ProyectoReds) | Codigo fuente completo |
 
-1. **Eficiencia Logística**: Correlación entre distancia geográfica real (Haversine) y tasa de retrasos
-2. **Costos de Transporte**: Top 5 rutas interestatales por costo promedio de flete + categorías de producto
+**Nota**: La API en Render puede tardar ~30 segundos en responder el primer request (plan gratuito con auto-sleep).
 
-## Arquitectura de Ingesta
+---
 
-### Agente TCP (Puerto 12000)
-- **Protocolo**: SOCK_STREAM — confiable, orientado a conexión
-- **Tablas**: orders, order_items, customers, sellers, products
-- **Justificación**: Datos transaccionales críticos que no pueden perderse (órdenes, pagos, facturación)
-- **Comportamiento**: Lee CSV línea a línea, envía cada 0.2 segundos
+## Arquitectura del Sistema
 
-### Agente UDP (Puerto 12001)
-- **Protocolo**: SOCK_DGRAM — rápido, sin garantía de entrega
-- **Tabla**: geolocation (con variación aleatoria ±0.001°)
-- **Justificación**: Simula GPS de flota en tiempo real; velocidad sobre confiabilidad
-- **Comportamiento**: Envía coordenadas cada 0.5 segundos
+```
+┌─────────────────┐         TCP (12000)         ┌─────────────────┐
+│  Agente TCP     │ ───────────────────────────>│                 │
+│  (Transaccional)│  CSV: ordenes, clientes,    │  Servidor       │
+│                 │  productos, vendedores      │  Concurrente    │
+└─────────────────┘                             │  Python         │
+                                                │  threading      │
+┌─────────────────┐         UDP (12001)         │                 │
+│  Agente UDP     │ ───────────────────────────>│                 │
+│  (Telemetria    │  GPS: lat/lng cada 0.5s     │                 │
+│   GPS)          │                             │                 │
+└─────────────────┘                             └────────┬────────┘
+                                                         │
+                                                         │ INSERT
+                                                         ▼
+                                                ┌─────────────────┐
+                                                │   PostgreSQL    │
+                                                │   (Supabase)    │
+                                                │                 │
+                                                │  dim_customers  │
+                                                │  dim_sellers    │
+                                                │  dim_products   │
+                                                │  dim_geolocation│
+                                                │  fact_orders    │
+                                                │  fact_order_items│
+                                                │  ingestion_log  │
+                                                └────────┬────────┘
+                                                         │
+                                                         │ SQL Queries
+                                                         ▼
+                                                ┌─────────────────┐
+                                                │   API REST      │
+                                                │   FastAPI       │
+                                                │   (Render)      │
+                                                └────────┬────────┘
+                                                         │ HTTP/JSON
+                                                         ▼
+                                                ┌─────────────────┐
+                                                │   Dashboard     │
+                                                │   React +       │
+                                                │   Chart.js      │
+                                                │   (Vercel)      │
+                                                └─────────────────┘
+```
 
-## Requisitos
+---
 
+## Stack Tecnologico
+
+| Capa | Tecnologia | Proposito |
+|------|-----------|-----------|
+| **Ingesta** | Python + sockets (TCP/UDP) | Agentes de envio de datos |
+| **Servidor** | Python + threading | Recepcion concurrente multi-cliente |
+| **Base de Datos** | PostgreSQL (Supabase) | Almacenamiento relacional en la nube |
+| **Backend** | FastAPI | API REST con endpoints analiticos |
+| **Frontend** | React 18 + Vite | Interfaz de usuario |
+| **Graficos** | Chart.js + react-chartjs-2 | Visualizacion de metricas |
+| **Despliegue** | Render (API) + Vercel (Frontend) | Hosting gratuito en la nube |
+
+---
+
+## Estructura del Proyecto
+
+```
+Proyecto/
+├── agentes/
+│   ├── agente_tcp.py          # Agente transaccional (SOCK_STREAM)
+│   └── agente_udp.py          # Agente telemetria GPS (SOCK_DGRAM)
+├── servidor/
+│   ├── servidor.py            # Servidor concurrente TCP+UDP
+│   └── database.py            # Conexion a PostgreSQL con context manager
+├── api/
+│   ├── app.py                 # FastAPI con 10 endpoints
+│   └── queries.py             # Queries SQL analiticas
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx            # Componente principal + tabs
+│   │   ├── api.js             # Cliente HTTP para la API
+│   │   └── components/
+│   │       ├── IngestionTable.jsx      # Tabla de datos crudos
+│   │       ├── DistanceChart.jsx       # Scatter plot distancia vs retraso
+│   │       ├── FreightRoutes.jsx       # Top 5 rutas por flete
+│   │       ├── SalesByState.jsx        # Ventas por estado (dona)
+│   │       ├── CategoryDelays.jsx      # Retrasos por categoria
+│   │       └── IngestionTimeline.jsx   # Timeline TCP/UDP
+│   └── vercel.json            # Config despliegue Vercel
+├── dataset/
+│   └── *.csv                  # Archivos del dataset Olist
+├── start.ps1                  # Script para iniciar todo localmente
+├── stop.ps1                   # Script para detener procesos
+├── render.yaml                # Config despliegue Render
+├── requirements.txt           # Dependencias Python
+└── .env.example               # Variables de entorno requeridas
+```
+
+---
+
+## Funcionalidades del Dashboard
+
+El dashboard web incluye **6 pestanas analiticas**:
+
+### 1. Datos Recibidos
+- Tabla con los ultimos 100 registros del `ingestion_log`
+- KPIs: Registros TCP, Pings UDP, Tablas procesadas, Total ordenes, Productos unicos, Flete promedio
+- Actualizacion automatica cada 5 segundos
+
+### 2. Distancia vs Retrasos
+- Scatter plot con distancia Haversine (km) vs dias de desviacion
+- **Verde**: Entregas anticipadas (93% de casos)
+- **Naranja**: Entregas con retraso (7% de casos)
+- Linea de referencia en Y=0 (fecha estimada)
+
+### 3. Top 5 Rutas
+- Rutas interestatales con mayor costo promedio de flete
+- Incluye categorias de productos por ruta
+- Ejemplo: PR -> PE lidera con R$ 63.17 promedio
+
+### 4. Ventas por Estado
+- Grafico de dona con distribucion geografica
+- Sao Paulo (SP): 44.9% de las ventas
+- 14 estados representados con cards de resumen
+
+### 5. Retrasos por Categoria
+- Barras verticales con promedio de dias vs fecha estimada
+- Valores negativos = entregas anticipadas
+- cool_stuff y telefonia: mayores margenes de anticipacion
+
+### 6. Timeline de Ingesta
+- Grafico de area con volumen de registros por minuto
+- Diferenciacion por protocolo (TCP azul, UDP amarillo)
+- 6 minutos de actividad, pico de 285 registros TCP
+
+---
+
+## API Endpoints
+
+| Metodo | Endpoint | Descripcion |
+|--------|----------|-------------|
+| GET | `/api/health` | Health check del servicio |
+| GET | `/api/db-check` | Verificacion de conexion a BD |
+| GET | `/api/datos` | Ultimos 100 registros del log de ingesta |
+| GET | `/api/metricas/resumen` | KPIs agregados (TCP, UDP, ordenes, productos, flete) |
+| GET | `/api/metricas/distancias` | Distancia Haversine vs dias de retraso |
+| GET | `/api/metricas/rutas` | Top 5 rutas interestatales por flete promedio |
+| GET | `/api/metricas/ventas-estado` | Ventas por estado geografico |
+| GET | `/api/metricas/categorias-retraso` | Retraso promedio por categoria de producto |
+| GET | `/api/metricas/ingesta-timeline` | Timeline de ingesta por minuto y protocolo |
+
+**Documentacion interactiva**: Disponible en `/docs` (Swagger UI) o `/redoc` (ReDoc)
+
+---
+
+## Ejecucion Local
+
+### Requisitos
 - Python 3.10+
 - Node.js 18+
-- Cuenta gratuita en [Supabase](https://supabase.com)
+- Cuenta en [Supabase](https://supabase.com) (gratuita)
 - Dataset: [Brazilian E-Commerce (Kaggle)](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)
 
-## Configuración
+### Configuracion
 
-1. Clona el repositorio
-2. Copia `.env.example` a `.env` y completa con tus credenciales de Supabase
-3. Instala dependencias Python: `pip install -r requirements.txt`
-4. Coloca los archivos CSV en la carpeta `dataset/`
+1. **Clonar repositorio**:
+   ```bash
+   git clone https://github.com/RyzenAGB/ProyectoReds.git
+   cd ProyectoReds
+   ```
 
-## Ejecución
+2. **Configurar variables de entorno**:
+   ```bash
+   cp .env.example .env
+   # Editar .env con tus credenciales de Supabase
+   ```
 
+3. **Instalar dependencias Python**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Colocar archivos CSV** en la carpeta `dataset/`
+
+### Iniciar el sistema
+
+Opcion A: **Script PowerShell** (Windows):
+```powershell
+.\start.ps1
+```
+
+Opcion B: **Manual** (4 terminales):
 ```bash
 # Terminal 1: Servidor concurrente
 py -m servidor.servidor
 
-# Terminal 2: Agente TCP (datos transaccionales)
+# Terminal 2: Agente TCP
 py -m agentes.agente_tcp
 
-# Terminal 3: Agente UDP (telemetría GPS)
+# Terminal 3: Agente UDP
 py -m agentes.agente_udp
 
 # Terminal 4: API REST
@@ -78,15 +238,12 @@ npm install
 npm run dev
 ```
 
-## Endpoints API
+### Acceso local
+- Dashboard: http://localhost:5173
+- API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/api/datos` | Últimos 100 registros del ingestion_log |
-| GET | `/api/metricas/distancias` | Distancia Haversine vs días de retraso |
-| GET | `/api/metricas/rutas` | Top 5 rutas interestatales por flete promedio |
-| GET | `/api/metricas/resumen` | Conteo de ingesta por tabla TCP y total pings UDP |
-| GET | `/api/health` | Health check |
+---
 
 ## Esquema de Base de Datos
 
@@ -94,62 +251,38 @@ npm run dev
 ingestion_log          → Registro crudo de ingesta (origen, tabla, contenido, fecha)
 dim_customers          → Clientes (id, zip_code, city, state)
 dim_sellers            → Vendedores (id, zip_code, city, state)
-dim_products           → Productos (id, categoría, peso, dimensiones)
-dim_geolocation        → Coordenadas por código postal (lat, lng, city, state)
-fact_orders            → Órdenes (id, cliente, status, fechas)
-fact_order_items       → Ítems de orden (orden, producto, vendedor, precio, flete)
+dim_products           → Productos (id, categoria, peso, dimensiones)
+dim_geolocation        → Coordenadas por codigo postal (lat, lng, city, state)
+fact_orders            → Ordenes (id, cliente, status, fechas)
+fact_order_items       → Items de orden (orden, producto, vendedor, precio, flete)
 ```
 
-## Despliegue
+---
 
-### Arquitectura de Producción
+## Caracteristicas Tecnicas Destacadas
 
-```
-┌─────────────┐      HTTP       ┌─────────────┐      SQL       ┌─────────────┐
-│   Vercel    │  ◄────────────► │   Render    │  ◄────────────►│  Supabase   │
-│  (Frontend) │                 │   (API)     │                │     (DB)    │
-│  React +    │                 │  FastAPI    │                │ PostgreSQL  │
-│  Chart.js   │                 │             │                │             │
-└─────────────┘                 └─────────────┘                └─────────────┘
-```
+- **Concurrencia real**: Servidor atiende TCP y UDP simultaneamente usando `threading`
+- **Protocolos de red**: Implementacion nativa de sockets SOCK_STREAM (TCP) y SOCK_DGRAM (UDP)
+- **Calculo geoespacial**: Distancia Haversine entre coordenadas de vendedor y cliente
+- **Context manager seguro**: `db_cursor()` garantiza commit/rollback automatico
+- **Manejo de errores**: Badge visual en frontend + logs detallados en consola
+- **Auto-refresh**: Dashboard actualiza datos cada 5 segundos
+- **CORS habilitado**: Permite comunicacion entre Vercel y Render
 
-### Paso 1: Subir a GitHub
-```bash
-git init
-git add .
-git commit -m "fase 3: sistema completo listo para despliegue"
-git branch -M main
-git remote add origin https://github.com/TU_USUARIO/datawarehouse-olist.git
-git push -u origin main
-```
+---
 
-### Paso 2: API en Render
-1. Ve a [render.com](https://render.com) → "New Web Service"
-2. Conecta tu repo de GitHub
-3. Configura:
-   - **Name**: `datawarehouse-api`
-   - **Environment**: `Python 3`
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `uvicorn api.app:app --host 0.0.0.0 --port 10000`
-4. Añade variable `DATABASE_URL` en Environment Variables
-5. Click **Deploy**
+## Hallazgos del Analisis
 
-### Paso 3: Frontend en Vercel
-1. Ve a [vercel.com](https://vercel.com) → "Add New Project"
-2. Importa tu repo
-3. Configura:
-   - **Framework Preset**: `Vite`
-   - **Root Directory**: `frontend`
-   - **Build Command**: `npm run build`
-   - **Output Directory**: `dist`
-4. Añade variable `VITE_API_URL=https://tu-api.onrender.com/api`
-5. Click **Deploy**
+Basado en el dataset analizado (100 ordenes):
 
-### Notas
-- **Servidor TCP/UDP**: Solo para desarrollo local. En producción, la API lee directamente de Supabase.
-- **CORS**: El `app.py` tiene `allow_origins=["*"]`. Para producción restrictiva, cambia a tu URL de Vercel.
-- **Datos**: Los datos ya están en Supabase. El frontend en Vercel consume la API en Render, que a su vez lee de Supabase.
+- **93% de entregas anticipadas**: Promedio de -11.54 dias vs fecha estimada
+- **Rutas mas caras**: PR -> PE (R$ 63.17), SP -> PE (R$ 37.11)
+- **Hub comercial**: Sao Paulo concentra 44.9% de las ventas
+- **Categorias eficientes**: cool_stuff y telefonia con mayores margenes de anticipacion
 
-## Autores
+---
 
-Proyecto académico — Redes de Computadores — Ingeniería de Sistemas UNI
+## Licencia
+
+Proyecto academico — Programacion de Aplicaciones de Red  
+Ingenieria en Datos e Inteligencia Organizacional
