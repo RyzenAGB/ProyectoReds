@@ -1,0 +1,726 @@
+================================================================================
+        DOCUMENTO TÉCNICO - DATA WAREHOUSE LOGÍSTICO
+        Proyecto Final - Redes de Computadores
+================================================================================
+
+Autor: [Tu nombre]
+Fecha: Mayo 2026
+Dataset: Brazilian E-Commerce (Olist) - Kaggle
+URL Producción: https://proyecto-reds.vercel.app
+
+================================================================================
+SECCIÓN 1: RESUMEN EJECUTIVO
+================================================================================
+
+Este proyecto implementa un sistema completo de flujo de datos que simula un
+Data Warehouse moderno. Utiliza el dataset público de comercio electrónico
+brasileño de Olist para demostrar la arquitectura ETL (Extract, Transform,
+Load) con componentes de red reales.
+
+El sistema consta de tres fases principales:
+1. Ingesta de datos mediante agentes TCP y UDP
+2. Procesamiento y almacenamiento en PostgreSQL (Supabase)
+3. Exposición y visualización mediante API REST + dashboard React
+
+Los datos fluyen desde archivos CSV a través de sockets de red, se almacenan
+en una base de datos en la nube y se visualizan en un dashboard accesible
+desde cualquier navegador web.
+
+================================================================================
+SECCIÓN 2: PROPUESTA TÉCNICA
+================================================================================
+
+2.1 TABLAS SELECCIONADAS
+-------------------------
+
+Se seleccionaron 6 tablas del dataset de Olist para construir un esquema
+analítico tipo copo de nieve (snowflake schema):
+
+TABLAS DE HECHOS (Transacciones centrales):
+- olist_orders_dataset: Estados de órdenes y fechas críticas (compra,
+  aprobación, entrega estimada y entrega real).
+- olist_order_items_dataset: Costo del producto y valor del flete por cada
+  ítem de la orden.
+
+TABLAS DE DIMENSIONES (Contexto descriptivo):
+- olist_customers_dataset: Identificador del cliente y su código postal.
+- olist_sellers_dataset: Identificador del vendedor y su código postal.
+- olist_geolocation_dataset: Latitud, longitud, ciudad y estado asociados
+  a cada código postal.
+- olist_products_dataset: Categoría, peso y dimensiones del producto.
+
+2.2 JUSTIFICACIÓN DE NEGOCIO
+------------------------------
+
+En el sector del comercio electrónico, la logística representa uno de los
+mayores costos operativos y es el factor determinante en la satisfacción del
+cliente. Analizar este flujo de datos en un Data Warehouse permite:
+
+a) Optimización de Rutas y Fletes: Identificar qué combinaciones de origen
+   (vendedor) y destino (cliente) generan los costos de envío más altos.
+
+b) Detección de Cuellos de Botella Geoespaciales: Mapear en qué estados o
+   ciudades de Brasil ocurren los mayores retrasos respecto a la fecha de
+   entrega estimada.
+
+c) Toma de Decisiones de Infraestructura: Al cruzar las coordenadas de mayor
+   demanda con los tiempos de entrega, la empresa puede justificar
+   matemáticamente dónde abrir nuevos centros de distribución (Hubs logísticos).
+
+2.3 PREGUNTAS ESTRATÉGICAS (Métricas a Resolver)
+--------------------------------------------------
+
+El dashboard final y las consultas SQL están orientados a responder:
+
+MÉTRICA 1 - Eficiencia Logística:
+¿Cuál es la correlación entre la distancia geográfica real (calculada mediante
+latitud y longitud entre vendedor y cliente) y la tasa de retrasos en las
+entregas (fecha real > fecha estimada)?
+
+MÉTRICA 2 - Costos de Transporte:
+¿Cuáles son las 5 rutas logísticas inter-estatales (Ej. São Paulo → Río de
+Janeiro) que concentran el mayor costo promedio de flete, y qué categorías
+de productos transitan más por ellas?
+
+MÉTRICA 3 - Ventas por Estado:
+¿Cuál es el volumen de ventas por estado geográfico de Brasil?
+
+MÉTRICA 4 - Retrasos por Categoría:
+¿Cuáles son las categorías de productos con mayores retrasos en la entrega?
+
+================================================================================
+SECCIÓN 3: ARQUITECTURA DEL SISTEMA
+================================================================================
+
+3.1 DIAGRAMA DE ARQUITECTURA
+------------------------------
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         ARQUITECTURA GENERAL                            │
+│                                                                         │
+│  ┌──────────────┐    TCP:12000    ┌──────────────┐    SQL    ┌────────┐│
+│  │ Agente TCP   │ ──────────────► │   Servidor   │ ────────►│Supabase││
+│  │ (5 tablas)   │                 │  Concurrente │          │  (DB)  ││
+│  └──────────────┘                 │              │          │        ││
+│                                   │  TCP + UDP   │          │Postgre-││
+│  ┌──────────────┐    UDP:12001    │              │          │  SQL   ││
+│  │ Agente UDP   │ ──────────────► │              │          │        ││
+│  │ (GPS/Geo)    │                 └──────────────┘          └────┬───┘│
+│  └──────────────┘                                               │    │
+│                                                                 │    │
+│  ┌──────────────────────────────────────────────────────────────┘    │
+│  │                                                                   │
+│  ▼                                                                   │
+│  ┌──────────────┐      HTTP       ┌──────────────┐                   │
+│  │  API FastAPI │ ◄──────────────►│   Frontend   │                   │
+│  │  (Render)    │    JSON         │   React      │                   │
+│  │              │                 │   (Vercel)   │                   │
+│  └──────────────┘                 └──────────────┘                   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+
+3.2 COMPONENTES DEL SISTEMA
+------------------------------
+
+| Componente     | Tecnología        | Ubicación    | Puerto/URL              |
+|----------------|-------------------|--------------|-------------------------|
+| Servidor       | Python + Sockets  | Local        | TCP:12000, UDP:12001    |
+| Agente TCP     | Python + Socket   | Local        | Conecta a :12000        |
+| Agente UDP     | Python + Socket   | Local        | Envía a :12001          |
+| Base de Datos  | PostgreSQL        | Supabase     | Puerto 5432 (pooler)    |
+| API REST       | FastAPI + Uvicorn | Render       | :10000 (interno)        |
+| Frontend       | React + Vite      | Vercel       | :443 (HTTPS)            |
+
+================================================================================
+SECCIÓN 4: FASE 1 - INGESTA DE DATOS
+================================================================================
+
+4.1 DATASET UTILIZADO
+-----------------------
+
+Fuente: Kaggle - Brazilian E-Commerce Public Dataset by Olist
+URL: https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce
+
+El dataset contiene 9 archivos CSV con información real de transacciones
+comerciales de Olist, un marketplace brasileño. Se utilizaron 6 de estos
+archivos para construir el modelo analítico.
+
+Archivos utilizados:
+- olist_orders_dataset.csv (100 registros seleccionados)
+- olist_order_items_dataset.csv (200 registros seleccionados)
+- olist_customers_dataset.csv (100 registros seleccionados)
+- olist_sellers_dataset.csv (100 registros seleccionados)
+- olist_products_dataset.csv (100 registros seleccionados)
+- olist_geolocation_dataset.csv (200 registros seleccionados)
+
+Total de registros procesados: ~800 registros
+
+4.2 AGENTE TRANSACCIONAL (TCP)
+-------------------------------
+
+El agente TCP simula un sistema crítico de transacciones bancarias o
+comerciales que requiere garantía de entrega de datos.
+
+CARACTERÍSTICAS TÉCNICAS:
+- Protocolo: TCP (SOCK_STREAM) - Orientado a conexión, confiable
+- Puerto destino: 12000
+- Dirección: 127.0.0.1 (localhost)
+- Codificación: UTF-8
+- Delay entre registros: 0.2 segundos
+- Límite por tabla: 100 registros
+
+TABLAS ASIGNADAS AL TCP:
+1. orders (100 registros) - Órdenes de compra
+2. order_items (200 registros) - Ítems de cada orden
+3. customers (100 registros) - Clientes
+4. sellers (100 registros) - Vendedores
+5. products (100 registros) - Productos
+
+FORMATO DE MENSAJE:
+[tabla]campo1,campo2,campo3,...\n
+
+Ejemplo:
+[orders]abc123,def456,delivered,2017-10-02,2017-10-02,2017-10-04,2017-10-10,2017-10-18
+
+JUSTIFICACIÓN DEL PROTOCOLO TCP:
+- Los datos transaccionales (órdenes, pagos, facturación) son críticos
+- Si se pierde un solo registro, los reportes financieros serían incorrectos
+- TCP garantiza entrega ordenada y completa de cada paquete
+- El handshake de 3 vías asegura que el servidor está listo para recibir
+
+CÓDIGO RELEVANTE (agentes/agente_tcp.py):
+- Crea socket SOCK_STREAM
+- Se conecta a 127.0.0.1:12000
+- Lee CSV línea por línea con csv.reader
+- Envía cada registro con sendall()
+- Pausa de 0.2s entre envíos para simular tráfico real
+
+4.3 AGENTE DE TELEMETRÍA (UDP)
+-------------------------------
+
+El agente UDP simula un sistema de GPS/rastreo de flota de vehículos de
+reparto que envía coordenadas en tiempo real.
+
+CARACTERÍSTICAS TÉCNICAS:
+- Protocolo: UDP (SOCK_DGRAM) - Rápido, sin garantía de entrega
+- Puerto destino: 12001
+- Dirección: 127.0.0.1 (localhost)
+- Codificación: UTF-8
+- Intervalo de envío: 0.5 segundos
+- Total de pings: 200
+
+COMPORTAMIENTO:
+- Lee datos reales de geolocalización del CSV
+- Añade variación aleatoria (±0.001°) a latitud y longitud
+- Simula el movimiento de un vehículo de reparto
+- Cada "ping" representa la posición GPS actualizada
+
+FORMATO DE MENSAJE:
+[geolocation]zip_code,lat,lng,city,state
+
+Ejemplo:
+[geolocation]31010,-19.9321000,-43.9382000,belo horizonte,MG
+
+JUSTIFICACIÓN DEL PROTOCOLO UDP:
+- Los datos de telemetría son de alta frecuencia (cada 0.5s)
+- Si se pierde un paquete, medio segundo después llega el siguiente
+- UDP prioriza velocidad sobre confiabilidad
+- Ideal para sensores, GPS, datos de monitoreo en tiempo real
+- No necesita handshake, reduce latencia
+
+CÓDIGO RELEVANTE (agentes/agente_udp.py):
+- Crea socket SOCK_DGRAM
+- Lee CSV de geolocalización
+- Aplica variación aleatoria a coordenadas
+- Envía con sendto() cada 0.5 segundos
+
+================================================================================
+SECCIÓN 5: FASE 2 - PROCESAMIENTO Y ALMACENAMIENTO
+================================================================================
+
+5.1 SERVIDOR CONCURRENTE
+--------------------------
+
+El servidor es el componente central del sistema. Recibe datos de múltiples
+clientes simultáneamente y los almacena en la base de datos.
+
+CARACTERÍSTICAS TÉCNICAS:
+- Lenguaje: Python 3.10+
+- Concurrencia: threading (hilos)
+- Puerto TCP: 12000
+- Puerto UDP: 12001
+- Dirección: 127.0.0.1
+
+IMPLEMENTACIÓN:
+- Socket TCP con SO_REUSEADDR para reutilización de puerto
+- Socket UDP con SO_REUSEADDR para evitar WinError 10048
+- Hilo principal: acepta conexiones TCP y crea un hilo por cliente
+- Hilo secundario: escucha datagramas UDP continuamente
+- Hilos daemon para cierre limpio con Ctrl+C
+
+FLUJO DE PROCESAMIENTO TCP:
+1. Servidor escucha en puerto 12000
+2. Cliente TCP se conecta (handshake de 3 vías)
+3. Servidor crea hilo para manejar esa conexión
+4. Recibe datos en buffer, decodifica UTF-8
+5. Parsea el prefijo [tabla] para identificar el destino
+6. Llama a insert_data() para guardar en Supabase
+7. Cuando cliente cierra, el hilo termina
+
+FLUJO DE PROCESAMIENTO UDP:
+1. Servidor escucha en puerto 12001
+2. Recibe datagramas UDP (sin conexión)
+3. Decodifica el mensaje
+4. Parsea el prefijo [geolocation]
+5. Llama a insert_data() para guardar en Supabase
+6. Continúa escuchando el siguiente datagrama
+
+CONCURENCIA:
+- threading.Thread(target=handle_tcp_client, daemon=True)
+- Cada conexión TCP corre en su propio hilo
+- El hilo UDP corre independientemente
+- Permite manejar múltiples agentes simultáneamente
+
+5.2 BASE DE DATOS (Supabase PostgreSQL)
+-----------------------------------------
+
+La base de datos utiliza PostgreSQL en Supabase (nube) con un esquema
+analítico tipo copo de nieve.
+
+CONEXIÓN:
+- Proveedor: Supabase (https://supabase.com)
+- Tipo: Session Pooler (IPv4)
+- Host: aws-1-us-east-1.pooler.supabase.com
+- Puerto: 5432
+- Base de datos: postgres
+- SSL: Requerido
+
+ESQUEMA DE BASE DE DATOS:
+
+TABLA CENTRAL (Requerimiento de la actividad):
+┌─────────────────────────────────────────────────────────┐
+│ ingestion_log                                           │
+├─────────────────┬───────────────┬───────────────────────┤
+│ id (SERIAL PK)  │ origen (VARCHAR) │ tabla_origen (VARCHAR) │
+│ contenido (JSONB)│ fecha (TIMESTAMP)│                        │
+└─────────────────┴───────────────┴───────────────────────┘
+
+TABLAS DIMENSIONALES (Esquema Copo de Nieve):
+
+dim_customers:
+- customer_id (PK), customer_unique_id, zip_code_prefix, city, state
+
+dim_sellers:
+- seller_id (PK), zip_code_prefix, city, state
+
+dim_products:
+- product_id (PK), category_name, weight_g, length_cm, height_cm, width_cm
+
+dim_geolocation:
+- id (SERIAL PK), zip_code_prefix, lat, lng, city, state
+
+fact_orders:
+- order_id (PK), customer_id, order_status, purchase_ts, approved_ts,
+  carrier_ts, delivered_ts, estimated_ts
+
+fact_order_items:
+- id (SERIAL PK), order_id, item_id, product_id, seller_id, price,
+  freight_value
+
+MÉTODO DE CONEXIÓN:
+- Se eliminó el pool de conexiones (psycopg2.pool) por problemas en Windows
+- Se usa conexión directa (psycopg2.connect) por cada operación
+- Context manager db_cursor() para abrir, ejecutar, commit y cerrar
+- Cada inserción es atómica: si falla la inserción dimensional, el
+  ingestion_log también se revierte (rollback)
+
+5.3 INSERCIÓN DE DATOS
+------------------------
+
+Cuando el servidor recibe un mensaje, lo procesa así:
+
+1. Decodifica el buffer UTF-8
+2. Busca el prefijo [tabla] en el mensaje
+3. Extrae el contenido CSV después del prefijo
+4. Llama a insert_data(origen, tabla, contenido)
+
+insert_data() hace:
+1. Parsea el contenido CSV (split por coma)
+2. Inserta en ingestion_log (tabla central)
+3. Según la tabla, inserta en la tabla dimensional correspondiente:
+   - "customers" → dim_customers
+   - "sellers" → dim_sellers
+   - "products" → dim_products
+   - "geolocation" → dim_geolocation
+   - "orders" → fact_orders
+   - "order_items" → fact_order_items
+4. Hace commit de toda la transacción
+
+BUG CORREGIDO (order_items):
+El CSV de order_items tiene 7 columnas:
+order_id, order_item_id, product_id, seller_id, shipping_limit_date, price, freight_value
+
+El bug original usaba parts[4] (shipping_limit_date) como price. Se corrigió
+a parts[5] para price y parts[6] para freight_value.
+
+================================================================================
+SECCIÓN 6: FASE 3 - EXPOSICIÓN Y VISUALIZACIÓN
+================================================================================
+
+6.1 API REST (FastAPI)
+-----------------------
+
+La API está desarrollada con FastAPI y desplegada en Render.
+
+CARACTERÍSTICAS:
+- Framework: FastAPI 0.100+
+- Servidor: Uvicorn
+- CORS: Habilitado para todos los orígenes (allow_origins=["*"])
+- Formato de respuesta: JSON
+
+ENDPOINTS IMPLEMENTADOS:
+
+| Método | Ruta                          | Descripción                          |
+|--------|-------------------------------|--------------------------------------|
+| GET    | /                             | Mensaje de bienvenida                |
+| GET    | /api/health                   | Health check (estado del servicio)   |
+| GET    | /api/db-check                 | Verifica conexión a la base de datos |
+| GET    | /api/datos                    | Últimos 100 registros del log        |
+| GET    | /api/metricas/resumen         | Conteo TCP/UDP + totales             |
+| GET    | /api/metricas/distancias      | Distancia Haversine vs retrasos      |
+| GET    | /api/metricas/rutas           | Top 5 rutas por costo de flete       |
+| GET    | /api/metricas/ventas-estado   | Ventas por estado geográfico         |
+| GET    | /api/metricas/categorias-retraso | Retrasos por categoría de producto |
+| GET    | /api/metricas/ingesta-timeline| Timeline de ingesta por minuto       |
+
+EJEMPLO DE RESPUESTA (/api/datos):
+{
+  "data": [
+    {
+      "id": 1192,
+      "origen": "TCP",
+      "tabla": "sellers",
+      "contenido": ["85d9eb9...", "31255", "belo horizonte", "MG"],
+      "fecha": "2026-05-08T18:12:07.589834"
+    }
+  ],
+  "total": 100
+}
+
+MÉTRICA DE DISTANCIA (Haversine):
+La fórmula de Haversine calcula la distancia entre dos puntos en la
+superficie terrestre usando sus coordenadas (latitud, longitud):
+
+a = sin²(Δlat/2) + cos(lat1) · cos(lat2) · sin²(Δlng/2)
+c = 2 · atan2(√a, √(1-a))
+distancia = R · c (donde R = 6371 km, radio terrestre)
+
+6.2 FRONTEND (React + Chart.js)
+--------------------------------
+
+El frontend está desarrollado con React 18, Vite y Chart.js 4, desplegado
+en Vercel.
+
+CARACTERÍSTICAS:
+- Framework: React 18 (funcional con hooks)
+- Bundler: Vite 5
+- Gráficos: Chart.js 4 + react-chartjs-2
+- Estado: useState, useEffect, useCallback
+- API: fetch() nativo
+- Auto-refresh: cada 5 segundos
+
+COMPONENTES DEL DASHBOARD:
+
+1. IngestionTable.jsx
+   - Muestra los últimos 100 registros del ingestion_log
+   - Columnas: ID, Origen (TCP/UDP), Tabla, Contenido, Fecha
+   - Badge de color: azul para TCP, amarillo para UDP
+
+2. DistanceChart.jsx
+   - Gráfico de dispersión (Scatter)
+   - Eje X: Distancia en km entre vendedor y cliente
+   - Eje Y: Días de retraso en la entrega
+   - Cada punto representa una orden entregada
+
+3. FreightRoutes.jsx
+   - Gráfico de barras horizontales
+   - Top 5 rutas interestatales por costo promedio de flete
+   - Cards con detalles: estado origen, destino, total envíos, flete promedio
+
+4. SalesByState.jsx
+   - Gráfico de barras verticales
+   - Volumen de ventas por estado de Brasil
+   - Los 15 estados con más ventas
+
+5. CategoryDelays.jsx
+   - Gráfico de barras horizontales
+   - Categorías de productos con mayor retraso promedio
+   - Top 10 categorías con más días de retraso
+
+6. IngestionTimeline.jsx
+   - Gráfico de líneas (Line chart)
+   - Eje X: Tiempo (minuto a minuto)
+   - Eje Y: Registros por minuto
+   - Dos líneas: TCP (azul) y UDP (amarillo)
+   - KPIs: Total TCP, Total UDP, Minutos activos
+
+PESTAÑAS DEL DASHBOARD:
+1. 📋 Datos Recibidos - Tabla + cards de resumen
+2. 📍 Distancia vs Retrasos - Gráfico de dispersión
+3. 🚚 Top 5 Rutas - Gráfico de barras + cards
+4. 🗺️ Ventas por Estado - Gráfico de barras
+5. 📦 Retrasos por Categoría - Gráfico de barras
+6. 📡 Timeline de Ingesta - Gráfico de líneas
+
+CONFIGURACIÓN DE PRODUCCIÓN:
+- Variable de entorno: VITE_API_URL=https://datawarehouse-api.onrender.com/api
+- Proxy en desarrollo: /api → http://127.0.0.1:8000
+
+================================================================================
+SECCIÓN 7: DESPLIEGUE EN LA NUBE
+================================================================================
+
+7.1 REPOSITORIO EN GITHUB
+---------------------------
+
+URL: https://github.com/RyzenAGB/ProyectoReds
+Rama principal: main
+Último commit: Documentación y endpoints de métricas actualizados
+
+7.2 API EN RENDER
+------------------
+
+Proveedor: Render (https://render.com)
+Tipo: Web Service
+Nombre: datawarehouse-api
+URL: https://datawarehouse-api.onrender.com
+Runtime: Python 3
+Build Command: pip install -r requirements.txt
+Start Command: uvicorn api.app:app --host 0.0.0.0 --port 10000
+Plan: Free (se duerme tras 15 min de inactividad)
+
+Variables de entorno configuradas:
+- DATABASE_URL: Connection string de Supabase (Session Pooler)
+
+7.3 FRONTEND EN VERCEL
+-----------------------
+
+Proveedor: Vercel (https://vercel.com)
+Framework: Vite
+Root Directory: frontend
+URL: https://proyecto-reds.vercel.app
+Build Command: npm run build
+Output Directory: dist
+
+Variables de entorno configuradas:
+- VITE_API_URL: https://datawarehouse-api.onrender.com/api
+
+7.4 BASE DE DATOS EN SUPABASE
+-------------------------------
+
+Proveedor: Supabase (https://supabase.com)
+Tipo: PostgreSQL
+URL Dashboard: https://supabase.com/dashboard/project/lgpswoemtsatisdkjhaq
+Conexión: Session Pooler (IPv4)
+Host: aws-1-us-east-1.pooler.supabase.com
+Puerto: 5432
+
+================================================================================
+SECCIÓN 8: CAPTURAS DE PANTALLA SUGERIDAS
+================================================================================
+
+Para elaborar el reporte PDF, se sugieren las siguientes capturas de pantalla
+con sus descripciones:
+
+CAPTURA 1: Terminal del Servidor
+---------------------------------
+Descripción: Muestra el servidor concurrente activo escuchando en los puertos
+TCP:12000 y UDP:12001. Se observan los mensajes de recepción de datos de ambos
+protocolos, indicando que los agentes están enviando información correctamente.
+
+CAPTURA 2: Terminal del Agente TCP
+-----------------------------------
+Descripción: Muestra el agente transaccional enviando datos de las 5 tablas
+(orders, order_items, customers, sellers, products) al servidor. Se observa el
+progreso de envío con el conteo de registros por tabla y el delay de 0.2
+segundos entre cada envío.
+
+CAPTURA 3: Terminal del Agente UDP
+-----------------------------------
+Descripción: Muestra el agente de telemetría GPS enviando coordenadas de
+geolocalización cada 0.5 segundos al servidor. Cada envío incluye la latitud,
+longitud, ciudad y estado con variación aleatoria para simular movimiento.
+
+CAPTURA 4: Dashboard Principal - Pestaña "Datos Recibidos"
+-----------------------------------------------------------
+Descripción: Vista principal del dashboard mostrando los cards de resumen
+(Registros TCP, Pings UDP, Tablas TCP, Total Órdenes, Productos Únicos,
+Flete Promedio) y la tabla con los últimos 100 registros del ingestion_log.
+Se observan registros TCP (órdenes, productos, vendedores, clientes) y UDP
+(geolocalización) con sus respectivos timestamps.
+
+CAPTURA 5: Dashboard - Pestaña "Distancia vs Retrasos"
+-------------------------------------------------------
+Descripción: Gráfico de dispersión que muestra la correlación entre la
+distancia geográfica (km) entre vendedor y cliente y los días de retraso en
+la entrega. Permite identificar si distancias mayores generan más retrasos.
+
+CAPTURA 6: Dashboard - Pestaña "Top 5 Rutas"
+---------------------------------------------
+Descripción: Gráfico de barras horizontales mostrando las 5 rutas
+logísticas interestatales con mayor costo promedio de flete, junto con
+cards que detallan el estado origen, destino, total de envíos y flete
+promedio de cada ruta.
+
+CAPTURA 7: Dashboard - Pestaña "Ventas por Estado"
+---------------------------------------------------
+Descripción: Gráfico de barras verticales que muestra el volumen de ventas
+por estado geográfico de Brasil. Los 15 estados con mayor número de órdenes
+procesadas.
+
+CAPTURA 8: Dashboard - Pestaña "Retrasos por Categoría"
+-------------------------------------------------------
+Descripción: Gráfico de barras horizontales que muestra las 10 categorías
+de productos con mayor promedio de días de retraso en la entrega. Permite
+identificar qué tipos de productos tienen problemas logísticos.
+
+CAPTURA 9: Dashboard - Pestaña "Timeline de Ingesta"
+-----------------------------------------------------
+Descripción: Gráfico de líneas que muestra el volumen de ingesta de datos
+por minuto, diferenciando entre TCP (línea azul) y UDP (línea amarilla).
+Incluye KPIs con el total de registros TCP, UDP y minutos activos del
+sistema.
+
+CAPTURA 10: Base de Datos en Supabase
+--------------------------------------
+Descripción: Vista del dashboard de Supabase mostrando las tablas creadas
+(ingestion_log, dim_customers, dim_sellers, dim_products, dim_geolocation,
+fact_orders, fact_order_items) con el conteo de registros de cada una.
+
+CAPTURA 11: API en Render
+---------------------------
+Descripción: Vista del dashboard de Render mostrando el servicio web
+"datawarehouse-api" activo, con la URL de producción y el estado del
+deployment.
+
+CAPTURA 12: Frontend en Vercel
+-------------------------------
+Descripción: Vista del dashboard de Vercel mostrando el proyecto
+"proyecto-reds" desplegado, con la URL de producción y el estado del
+deployment.
+
+CAPTURA 13: Código del Servidor (servidor.py)
+----------------------------------------------
+Descripción: Fragmento del código del servidor concurrente mostrando la
+creación de los sockets TCP y UDP, el uso de SO_REUSEADDR, y la
+implementación de threading para manejar múltiples clientes.
+
+CAPTURA 14: Código del Agente TCP (agente_tcp.py)
+--------------------------------------------------
+Descripción: Fragmento del código del agente TCP mostrando la conexión al
+servidor, la lectura del CSV, y el envío de datos con el formato [tabla]contenido.
+
+CAPTURA 15: Código del Agente UDP (agente_udp.py)
+--------------------------------------------------
+Descripción: Fragmento del código del agente UDP mostrando la creación del
+socket SOCK_DGRAM, la lectura de geolocalización, y el envío de coordenadas
+con variación aleatoria.
+
+================================================================================
+SECCIÓN 9: CONCLUSIONES
+================================================================================
+
+9.1 CUMPLIMIENTO DE REQUISITOS
+-------------------------------
+
+✅ Fase 1 - Ingesta de Datos:
+   - Dataset descargado de Kaggle (Brazilian E-Commerce)
+   - Agente TCP implementado con socket SOCK_STREAM
+   - Agente UDP implementado con socket SOCK_DGRAM
+   - Tablas asignadas según naturaleza del protocolo
+   - Delay de 0.2s (TCP) y 0.5s (UDP) para simular tráfico real
+
+✅ Fase 2 - Procesamiento y Almacenamiento:
+   - Servidor concurrente con TCP:12000 y UDP:12001
+   - Threading para manejo de múltiples clientes
+   - Almacenamiento en PostgreSQL (Supabase)
+   - Tabla central ingestion_log + tablas dimensionales
+
+✅ Fase 3 - Exposición y Visualización:
+   - API REST con FastAPI y 10 endpoints
+   - Frontend React con Chart.js y 6 gráficos
+   - Despliegue en Vercel (frontend) y Render (API)
+   - Accesible desde cualquier navegador
+
+9.2 DECISIONES DE DISEÑO
+--------------------------
+
+a) Protocolo TCP para datos transaccionales:
+   Los datos de órdenes, clientes, vendedores y productos son críticos para
+   el negocio. TCP garantiza que no se pierda ningún registro durante la
+   transmisión, lo cual es esencial para la integridad del Data Warehouse.
+
+b) Protocolo UDP para telemetría GPS:
+   Los datos de geolocalización son de alta frecuencia y tolerantes a
+   pérdidas. Si un "ping" GPS se pierde, el siguiente llega 0.5 segundos
+   después con la posición actualizada. UDP ofrece la velocidad necesaria
+   para este tipo de datos.
+
+c) Esquema Copo de Nieve:
+   El modelo dimensional permite consultas analíticas eficientes mediante
+   JOINs entre tablas de hechos y dimensiones. Esto facilita el cálculo de
+   métricas como distancia geográfica, retrasos y costos de flete.
+
+d) Supabase como base de datos:
+   Supabase ofrece PostgreSQL administrado en la nube con un plan gratuito
+   generoso. El Session Pooler (IPv4) permite la conexión desde servicios
+   como Render y Vercel que solo soportan IPv4.
+
+e) Render + Vercel para despliegue:
+   Render ejecuta la API Python con Uvicorn de forma gratuita. Vercel sirve
+   el frontend React desde una CDN global. Esta combinación permite un
+   despliegue profesional sin costo.
+
+9.3 APRENDIZAJES
+-----------------
+
+- Los sockets TCP y UDP tienen comportamientosfundamentalmente diferentes
+  que los hacen adecuados para distintos tipos de datos.
+- La concurrencia con threading es esencial para servidores que deben
+  atender múltiples clientes simultáneamente.
+- La conexión a bases de datos en la nube requiere considerar aspectos
+  como IPv4/IPv6, SSL y pooling de conexiones.
+- El despliegue en la nube implica configurar variables de entorno, CORS,
+  y adaptar la URL de la API según el entorno (desarrollo vs producción).
+
+================================================================================
+SECCIÓN 10: REFERENCIAS
+================================================================================
+
+1. Kaggle - Brazilian E-Commerce Public Dataset by Olist
+   https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce
+
+2. Documentación de Python - Socket Programming
+   https://docs.python.org/3/library/socket.html
+
+3. Documentación de FastAPI
+   https://fastapi.tiangolo.com/
+
+4. Documentación de React
+   https://react.dev/
+
+5. Documentación de Chart.js
+   https://www.chartjs.org/
+
+6. Supabase - PostgreSQL administrado
+   https://supabase.com/docs
+
+7. Render - Despliegue de aplicaciones
+   https://render.com/docs
+
+8. Vercel - Despliegue de frontend
+   https://vercel.com/docs
+
+================================================================================
+FIN DEL DOCUMENTO TÉCNICO
+================================================================================
