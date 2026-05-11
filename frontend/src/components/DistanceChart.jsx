@@ -29,11 +29,14 @@ export default function DistanceChart({ data }) {
       {
         label: 'Órdenes entregadas',
         data: puntos,
-        backgroundColor: 'rgba(59, 130, 246, 0.6)',
-        borderColor: 'rgba(59, 130, 246, 1)',
+        backgroundColor: 'rgba(56, 189, 248, 0.5)',
+        borderColor: 'rgba(56, 189, 248, 0.8)',
         borderWidth: 1,
         pointRadius: 4,
-        pointHoverRadius: 7,
+        pointHoverRadius: 8,
+        pointHoverBackgroundColor: '#7dd3fc',
+        pointHoverBorderColor: '#38bdf8',
+        pointHoverBorderWidth: 2,
       },
     ],
   }
@@ -43,9 +46,16 @@ export default function DistanceChart({ data }) {
     maintainAspectRatio: false,
     plugins: {
       legend: {
-        labels: { color: '#94a3b8', font: { size: 12 } },
+        labels: { color: '#94a3b8', font: { family: "'Inter', sans-serif", size: 12 } },
       },
       tooltip: {
+        backgroundColor: 'rgba(17, 24, 39, 0.95)',
+        borderColor: 'rgba(56, 189, 248, 0.2)',
+        borderWidth: 1,
+        titleFont: { family: "'Space Grotesk', sans-serif", weight: '700' },
+        bodyFont: { family: "'JetBrains Mono', monospace", size: 12 },
+        padding: 12,
+        cornerRadius: 8,
         callbacks: {
           label: (ctx) =>
             `Distancia: ${ctx.parsed.x.toFixed(1)} km — Retraso: ${ctx.parsed.y} días`,
@@ -54,14 +64,14 @@ export default function DistanceChart({ data }) {
     },
     scales: {
       x: {
-        title: { display: true, text: 'Distancia (km)', color: '#94a3b8' },
-        ticks: { color: '#64748b' },
-        grid: { color: '#1e293b' },
+        title: { display: true, text: 'Distancia (km)', color: '#94a3b8', font: { family: "'Inter', sans-serif" } },
+        ticks: { color: '#475569', font: { family: "'JetBrains Mono', monospace", size: 11 } },
+        grid: { color: 'rgba(148, 163, 184, 0.06)' },
       },
       y: {
-        title: { display: true, text: 'Días de retraso', color: '#94a3b8' },
-        ticks: { color: '#64748b', stepSize: 5 },
-        grid: { color: '#1e293b' },
+        title: { display: true, text: 'Días de retraso', color: '#94a3b8', font: { family: "'Inter', sans-serif" } },
+        ticks: { color: '#475569', stepSize: 5, font: { family: "'JetBrains Mono', monospace", size: 11 } },
+        grid: { color: 'rgba(148, 163, 184, 0.06)' },
         beginAtZero: true,
       },
     },

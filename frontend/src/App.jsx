@@ -16,12 +16,12 @@ import {
 } from './api'
 
 const TABS = [
-  { id: 'ingestion',  label: '📋 Datos Recibidos' },
-  { id: 'distancia',  label: '📍 Distancia vs Retrasos' },
-  { id: 'rutas',      label: '🚚 Top 5 Rutas' },
-  { id: 'ventas',     label: '🗺️ Ventas por Estado' },
+  { id: 'ingestion', label: '📋 Datos Recibidos' },
+  { id: 'distancia', label: '📍 Distancia vs Retrasos' },
+  { id: 'rutas', label: '🚚 Top 5 Rutas' },
+  { id: 'ventas', label: '🗺️ Ventas por Estado' },
   { id: 'categorias', label: '📦 Retrasos por Categoría' },
-  { id: 'timeline',   label: '📡 Timeline de Ingesta' },
+  { id: 'timeline', label: '📡 Timeline de Ingesta' },
 ]
 
 export default function App() {
@@ -50,13 +50,13 @@ export default function App() {
   const cargarDatos = useCallback(async () => {
     setRefreshing(true)
     const results = await Promise.allSettled([
-      cargarEndpoint('datos',      fetchDatos,              setDatos),
-      cargarEndpoint('distancias', fetchDistancias,         setDistancias),
-      cargarEndpoint('rutas',      fetchRutas,              setRutas),
-      cargarEndpoint('resumen',    fetchResumen,            setResumen),
-      cargarEndpoint('ventas',     fetchVentasEstado,       setVentasEstado),
-      cargarEndpoint('categorias', fetchCategoriasRetraso,  setCategoriasRetraso),
-      cargarEndpoint('timeline',   fetchIngestaTimeline,    setIngestaTimeline),
+      cargarEndpoint('datos', fetchDatos, setDatos),
+      cargarEndpoint('distancias', fetchDistancias, setDistancias),
+      cargarEndpoint('rutas', fetchRutas, setRutas),
+      cargarEndpoint('resumen', fetchResumen, setResumen),
+      cargarEndpoint('ventas', fetchVentasEstado, setVentasEstado),
+      cargarEndpoint('categorias', fetchCategoriasRetraso, setCategoriasRetraso),
+      cargarEndpoint('timeline', fetchIngestaTimeline, setIngestaTimeline),
     ])
     const errores = results
       .filter((r) => r.status === 'fulfilled' && r.value !== null)
@@ -214,7 +214,7 @@ export default function App() {
       </main>
 
       <footer className="app-footer">
-        <p>Proyecto Data Warehouse — Redes de Computadores — Ing. de Sistemas UNI</p>
+        <p>Proyecto Data Warehouse — Programacion de Aplicaciones de Red - Ing. Datos </p>
       </footer>
     </div>
   )
