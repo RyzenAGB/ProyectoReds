@@ -61,7 +61,16 @@ export default function App() {
     const errores = results
       .filter((r) => r.status === 'fulfilled' && r.value !== null)
       .map((r) => r.value)
-    setError(errores.length > 0 ? errores.join(' | ') : null)
+    // Solo mostrar ERROR si fallan los endpoints criticos (datos o resumen)
+    const errorCritico = errores.some(e => e.includes('datos') || e.includes('resumen'))
+    if (errorCritico) {
+      setError(errores.join(' | '))
+    } else if (errores.length > 0) {
+      console.warn('Endpoints secundarios fallaron:', errores)
+      setError(null)
+    } else {
+      setError(null)
+    }
     setLoading(false)
     setRefreshing(false)
   }, [cargarEndpoint])
